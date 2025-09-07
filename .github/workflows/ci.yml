@@ -1,22 +1,41 @@
-name: CI Smoke
+name: CI (Next.js with npm)
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch: {}   # 수동 실행 버튼
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  smoke:
+  ci:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Show context
-        run: |
-          echo "event: ${{ github.event_name }}"
-          echo "ref:   ${{ github.ref }}"
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 20 + npm cache
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: node -v
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      # ✅ Next.js 의존성 조기 검증(빠른 실패)
+      - name: Verify Next.js dependency
+        run: |
+          node -e "const p=require('./package.json');if(!((p.dependencies&&p.dependencies.next)||(p.devDependencies&&p.devDependencies.next))){console.error('No next dependency');process.exit(1)}"
+
+      - name: Install deps (npm ci)
+        run: npm ci
+
+      - name: Lint
+        run: npm run l
